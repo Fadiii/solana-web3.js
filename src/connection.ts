@@ -3935,52 +3935,56 @@ export class Connection {
           },
         );
         (async () => {
-          await subscriptionSetupPromise;
-          if (done) return;
-          const response = await this.getSignatureStatus(signature);
-          if (done) return;
-          if (response == null) {
-            return;
-          }
-          const {context, value} = response;
-          if (value == null) {
-            return;
-          }
-          if (value?.err) {
-            reject(value.err);
-          } else {
-            switch (commitment) {
-              case 'confirmed':
-              case 'single':
-              case 'singleGossip': {
-                if (value.confirmationStatus === 'processed') {
-                  return;
-                }
-                break;
-              }
-              case 'finalized':
-              case 'max':
-              case 'root': {
-                if (
-                  value.confirmationStatus === 'processed' ||
-                  value.confirmationStatus === 'confirmed'
-                ) {
-                  return;
-                }
-                break;
-              }
-              // exhaust enums to ensure full coverage
-              case 'processed':
-              case 'recent':
+          try {
+            await subscriptionSetupPromise;
+            if (done) return;
+            const response = await this.getSignatureStatus(signature);
+            if (done) return;
+            if (response == null) {
+              return;
             }
-            done = true;
-            resolve({
-              __type: TransactionStatus.PROCESSED,
-              response: {
-                context,
-                value,
-              },
-            });
+            const {context, value} = response;
+            if (value == null) {
+              return;
+            }
+            if (value?.err) {
+              reject(value.err);
+            } else {
+              switch (commitment) {
+                case 'confirmed':
+                case 'single':
+                case 'singleGossip': {
+                  if (value.confirmationStatus === 'processed') {
+                    return;
+                  }
+                  break;
+                }
+                case 'finalized':
+                case 'max':
+                case 'root': {
+                  if (
+                    value.confirmationStatus === 'processed' ||
+                    value.confirmationStatus === 'confirmed'
+                  ) {
+                    return;
+                  }
+                  break;
+                }
+                // exhaust enums to ensure full coverage
+                case 'processed':
+                case 'recent':
+              }
+              done = true;
+              resolve({
+                __type: TransactionStatus.PROCESSED,
+                response: {
+                  context,
+                  value,
+                },
+              });
+            }
+          } catch (err) {
+            reject(err);
           }
         })();
       } catch (err) {
