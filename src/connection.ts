@@ -1665,9 +1665,9 @@ function createRpcClient(
     };
 
     try {
-      let too_many_requests_retries = 5;
+      let too_many_requests_retries = 10;
       let res: Response;
-      let waitTime = 500;
+      let waitTime = 1000;
       for (;;) {
         if (fetchWithMiddleware) {
           res = await fetchWithMiddleware(url, options);
@@ -1696,6 +1696,9 @@ function createRpcClient(
       if (res.ok) {
         callback(null, text);
       } else {
+        console.error(
+          `${res.status} ${res.statusText}: ${text} - Request: ${request}`,
+        );
         callback(new Error(`${res.status} ${res.statusText}: ${text}`));
       }
     } catch (err) {
