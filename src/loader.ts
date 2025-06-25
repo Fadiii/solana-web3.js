@@ -66,76 +66,79 @@ export class Loader {
     data: Buffer | Uint8Array | Array<number>,
   ): Promise<boolean> {
     {
-      const balanceNeeded = await connection.getMinimumBalanceForRentExemption(
-        data.length,
-      );
+      try {
+        const balanceNeeded =
+          await connection.getMinimumBalanceForRentExemption(data.length);
 
-      // Fetch program account info to check if it has already been created
-      const programInfo = await connection.getAccountInfo(
-        program.publicKey,
-        'confirmed',
-      );
+        // Fetch program account info to check if it has already been created
+        const programInfo = await connection.getAccountInfo(
+          program.publicKey,
+          'confirmed',
+        );
 
-      let transaction: Transaction | null = null;
-      if (programInfo !== null) {
-        if (programInfo.executable) {
-          console.error('Program load failed, account is already executable');
-          return false;
-        }
+        let transaction: Transaction | null = null;
+        if (programInfo !== null) {
+          if (programInfo.executable) {
+            console.error('Program load failed, account is already executable');
+            return false;
+          }
 
-        if (programInfo.data.length !== data.length) {
-          transaction = transaction || new Transaction();
-          transaction.add(
-            SystemProgram.allocate({
-              accountPubkey: program.publicKey,
+          if (programInfo.data.length !== data.length) {
+            transaction = transaction || new Transaction();
+            transaction.add(
+              SystemProgram.allocate({
+                accountPubkey: program.publicKey,
+                space: data.length,
+              }),
+            );
+          }
+
+          if (!programInfo.owner.equals(programId)) {
+            transaction = transaction || new Transaction();
+            transaction.add(
+              SystemProgram.assign({
+                accountPubkey: program.publicKey,
+                programId,
+              }),
+            );
+          }
+
+          if (programInfo.lamports < balanceNeeded) {
+            transaction = transaction || new Transaction();
+            transaction.add(
+              SystemProgram.transfer({
+                fromPubkey: payer.publicKey,
+                toPubkey: program.publicKey,
+                lamports: balanceNeeded - programInfo.lamports,
+              }),
+            );
+          }
+        } else {
+          transaction = new Transaction().add(
+            SystemProgram.createAccount({
+              fromPubkey: payer.publicKey,
+              newAccountPubkey: program.publicKey,
+              lamports: balanceNeeded > 0 ? balanceNeeded : 1,
               space: data.length,
-            }),
-          );
-        }
-
-        if (!programInfo.owner.equals(programId)) {
-          transaction = transaction || new Transaction();
-          transaction.add(
-            SystemProgram.assign({
-              accountPubkey: program.publicKey,
               programId,
             }),
           );
         }
 
-        if (programInfo.lamports < balanceNeeded) {
-          transaction = transaction || new Transaction();
-          transaction.add(
-            SystemProgram.transfer({
-              fromPubkey: payer.publicKey,
-              toPubkey: program.publicKey,
-              lamports: balanceNeeded - programInfo.lamports,
-            }),
+        // If the account is already created correctly, skip this step
+        // and proceed directly to loading instructions
+        if (transaction !== null) {
+          await sendAndConfirmTransaction(
+            connection,
+            transaction,
+            [payer, program],
+            {
+              commitment: 'confirmed',
+            },
           );
         }
-      } else {
-        transaction = new Transaction().add(
-          SystemProgram.createAccount({
-            fromPubkey: payer.publicKey,
-            newAccountPubkey: program.publicKey,
-            lamports: balanceNeeded > 0 ? balanceNeeded : 1,
-            space: data.length,
-            programId,
-          }),
-        );
-      }
-
-      // If the account is already created correctly, skip this step
-      // and proceed directly to loading instructions
-      if (transaction !== null) {
-        await sendAndConfirmTransaction(
-          connection,
-          transaction,
-          [payer, program],
-          {
-            commitment: 'confirmed',
-          },
-        );
+      } catch (e) {
+        console.error(e);
       }
     }
 
